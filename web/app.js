@@ -184,13 +184,12 @@ function itemRow(it, terms) {
   const qty = it.qty != null && Number(it.qty) !== 1 ? `<span class="qty">×${esc(it.qty)}</span>` : '';
   const z = zoneOf(it);
   const tag = z === UNPLACED ? ((it.room || '').trim() || '위치 미정') : z;
+  const meta = [it.category ? hl(it.category, terms) : '', it.memo ? hl(it.memo, terms) : ''].filter(Boolean).join(' · ');
   return `<li><button type="button" class="item" data-id="${esc(it.id)}" aria-label="${esc(it.name)} 편집">
-      <span class="tag">${hl(tag, terms)}</span>
       <span class="body">
-        <div class="name">${hl(it.name, terms)}${qty}</div>
-        ${it.spot ? `<div class="spot">${hl(it.spot, terms)}</div>` : ''}
-        ${it.memo ? `<div class="memo">${hl(it.memo, terms)}</div>` : ''}
-        ${it.category ? `<div class="cat">${hl(it.category, terms)}</div>` : ''}
+        <span class="name">${hl(it.name, terms)}${qty}</span>
+        <span class="loc"><span class="tag">${hl(tag, terms)}</span>${it.spot ? `<span class="spot">${hl(it.spot, terms)}</span>` : ''}</span>
+        ${meta ? `<span class="meta">${meta}</span>` : ''}
       </span>
       <span class="dd">${n === null ? '' : `<span class="pill ${s}">${dLabel(n)}</span><span class="date">${esc(it.expiry)}</span>`}</span>
     </button></li>`;
@@ -206,7 +205,7 @@ function renderPanel() {
     : sel === UNPLACED ? '구역이 정해지지 않은 물건'
     : z.kind === 'storage' ? `${z.room} 안의 수납장` : (childrenOf(z.id).length ? `${childrenOf(z.id).map((c) => c.id).join(', ')} 포함` : '방');
   $('#listTitle').textContent = !sel ? (terms.length ? `‘${state.q}’` : '모든 물건') : sel === UNPLACED ? '위치 미지정' : sel;
-  $('#panelAdd').hidden = sel === UNPLACED;
+  $('#panelAdd').hidden = !sel || sel === UNPLACED;
   $('#panelAdd').textContent = sel && sel !== UNPLACED ? `＋ ${sel}에 추가` : '＋ 물건 추가';
   $('#foodToggle').setAttribute('aria-pressed', String(state.foodOnly));
   $('#sort').value = state.sort;
@@ -230,7 +229,7 @@ function renderPanel() {
     expiry: (a, b) => (daysLeft(a.expiry) ?? 1e9) - (daysLeft(b.expiry) ?? 1e9) || byName(a, b),
   };
   rows.sort(sorters[state.sort] || sorters.recent);
-  $('#listCount').textContent = `${rows.length}개`;
+  $('#listCount').textContent = String(rows.length);
 
   if (!rows.length) {
     const what = terms.length ? `‘${esc(state.q)}’에 맞는 물건이 없어요` : state.foodOnly ? '유통기한 있는 물건이 없어요' : '아직 여기에 둔 물건이 없어요';
@@ -257,7 +256,7 @@ function renderPanel() {
 function selectZone(id) {
   state.selected = state.selected === id ? null : id;
   renderMap(); renderPanel();
-  if (state.selected && window.matchMedia('(max-width: 899px)').matches) {
+  if (state.selected) {
     $('.zone-panel').scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
   }
 }
