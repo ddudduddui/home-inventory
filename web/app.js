@@ -43,6 +43,7 @@ function show(view) {
   $('#searchBox').hidden = !inApp;
   $('#addBtn').hidden = !inApp;
   $('#signOutBtn').hidden = view === 'loginView' || !view;
+  $('#pwBtn').hidden = !inApp;
 }
 
 /* ---------- render ---------- */
@@ -249,20 +250,85 @@ $('#alertDays').addEventListener('change', async (e) => {
 try { const s = localStorage.getItem('sort'); if (s) state.sort = s; } catch {}
 
 /* ---------- auth ---------- */
+function loginMsg(text) { const m = $('#loginMsg'); m.textContent = text; m.hidden = !text; }
+function readEmail() {
+  const email = $('#loginEmail').value.trim();
+  if (!/^\S+@\S+\.\S+$/.test(email)) { loginMsg('이메일 주소를 확인해 주세요.'); $('#loginEmail').focus(); return null; }
+  try { localStorage.setItem('lastEmail', email); } catch {}
+  return email;
+}
+try { const e = localStorage.getItem('lastEmail'); if (e) $('#loginEmail').value = e; } catch {}
+
 $('#loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const email = $('#loginEmail').value.trim();
-  const msg = $('#loginMsg');
-  if (!/^\S+@\S+\.\S+$/.test(email)) { msg.textContent = '이메일 주소를 확인해 주세요.'; msg.hidden = false; return; }
+  const email = readEmail(); if (!email) return;
+  const password = $('#loginPw').value;
+  if (!password) { loginMsg('비밀번호를 입력해 주세요. 아직 없다면 아래 ‘메일로 로그인 링크 받기’를 누르세요.'); $('#loginPw').focus(); return; }
   $('#loginBtn').disabled = true;
-  const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
+  const { error } = await sb.auth.signInWithPassword({ email, password });
   $('#loginBtn').disabled = false;
-  msg.textContent = error
-    ? (error.status === 429 ? '잠시 뒤 다시 시도해 주세요. 로그인 메일은 짧은 시간에 여러 번 보낼 수 없어요.' : '로그인 메일을 보내지 못했어요: ' + error.message)
-    : `${email} 로 로그인 링크를 보냈어요. 메일함을 확인해 주세요.`;
-  msg.hidden = false;
+  if (error) {
+    loginMsg(error.status === 429 ? '시도가 너무 많아요. 잠시 뒤 다시 해 주세요.'
+      : '이메일 또는 비밀번호가 맞지 않아요. 비밀번호를 정한 적이 없다면 아래 링크 로그인을 이용하세요.');
+    return;
+  }
+  loginMsg(''); $('#loginPw').value = '';
+});
+
+let linkCooldown = 0, linkTimer;
+function tickLink() {
+  const b = $('#linkBtn');
+  if (linkCooldown > 0) { b.disabled = true; b.textContent = `링크 다시 받기 (${linkCooldown}초 뒤)`; linkCooldown--; linkTimer = setTimeout(tickLink, 1000); }
+  else { b.disabled = false; b.textContent = '메일로 로그인 링크 받기'; }
+}
+$('#linkBtn').addEventListener('click', async () => {
+  const email = readEmail(); if (!email) return;
+  $('#linkBtn').disabled = true;
+  const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
+  if (error) {
+    const wait = Number((error.message || '').match(/(\d+)\s*seconds?/)?.[1]) || 60;
+    loginMsg(error.status === 429
+      ? `메일은 잠시 뒤에 다시 보낼 수 있어요. 받은 메일이 있다면 그 링크를 눌러 주세요.`
+      : '로그인 메일을 보내지 못했어요: ' + error.message);
+    linkCooldown = error.status === 429 ? wait : 0;
+  } else {
+    loginMsg(`${email} 로 로그인 링크를 보냈어요. 메일함(스팸함 포함)을 확인해 주세요.`);
+    linkCooldown = 60;
+  }
+  clearTimeout(linkTimer); tickLink();
 });
 $('#signOutBtn').addEventListener('click', async () => { await sb.auth.signOut(); });
+
+/* 비밀번호 설정 */
+function closePw() { $('#pwScrim').hidden = true; }
+$('#pwBtn').addEventListener('click', () => {
+  const email = state.session?.user?.email || '';
+  $('#pwEmail').textContent = email; $('#pwUser').value = email;
+  $('#pwNew').value = ''; $('#pwNew2').value = ''; $('#pwErr').hidden = true;
+  $('#pwScrim').hidden = false;
+  setTimeout(() => $('#pwNew').focus(), 30);
+});
+$('#pwCancel').addEventListener('click', closePw);
+$('#pwScrim').addEventListener('click', (e) => { if (e.target === $('#pwScrim')) closePw(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#pwScrim').hidden) closePw(); });
+$('#pwForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const a = $('#pwNew').value, b = $('#pwNew2').value, err = $('#pwErr');
+  const fail = (t) => { err.textContent = t; err.hidden = false; };
+  if (a.length < 8) return fail('8자 이상으로 정해 주세요.');
+  if (a !== b) return fail('두 칸의 비밀번호가 달라요.');
+  $('#pwSave').disabled = true;
+  const { error } = await sb.auth.updateUser({ password: a });
+  $('#pwSave').disabled = false;
+  if (error) {
+    return fail(/reauth|recent/i.test(error.message) ? '보안을 위해 로그아웃 후 메일 링크로 다시 들어와서 설정해 주세요.'
+      : /weak|short|characters/i.test(error.message) ? '더 길거나 복잡한 비밀번호로 정해 주세요.'
+      : /same|different/i.test(error.message) ? '지금 쓰는 비밀번호와 같아요.'
+      : '비밀번호를 저장하지 못했어요: ' + error.message);
+  }
+  closePw();
+  toast('비밀번호를 정했어요. 다음부터 메일 없이 로그인할 수 있어요');
+});
 
 /* ---------- data ---------- */
 async function loadItems() {

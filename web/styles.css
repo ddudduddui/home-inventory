@@ -69,8 +69,10 @@ main { display: grid; gap: 22px; padding-block: 20px 60px; }
 .login { max-width: 460px; margin: 40px auto 0; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 24px; display: grid; gap: 12px; box-shadow: var(--shadow); }
 .login h2 { font-family: var(--font-display); margin: 0; font-size: 20px; }
 .login p { margin: 0; }
-.login-form { display: flex; flex-wrap: wrap; gap: 8px; }
-.login-form input { flex: 1 1 200px; min-width: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); font-size: 16px; }
+.login-stack { display: grid; gap: 10px; }
+.btn.block { width: 100%; justify-content: center; padding-block: 11px; }
+.divider { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; margin-top: 4px; }
+.divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 
 /* alert board */
 .alerts { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; }
