@@ -53,12 +53,17 @@ function show(view) {
 }
 
 /* ---------- zones ---------- */
-const zoneOf = (it) => (ZONE.has((it.room || '').trim()) ? it.room.trim() : UNPLACED);
+const LEGACY = PLAN.legacy || {};
+const zoneOf = (it) => {
+  const raw = (it.room || '').trim();
+  if (ZONE.has(raw)) return raw;
+  if (ZONE.has(LEGACY[raw])) return LEGACY[raw];
+  return UNPLACED;
+};
 const roomOfZone = (zid) => (ZONE.get(zid)?.kind === 'storage' ? ZONE.get(zid).room : zid);
+const placeName = (it) => (it.room || '').trim() || '위치 미정';
 function whereText(it) {
-  const z = zoneOf(it);
-  const base = z === UNPLACED ? ((it.room || '').trim() || '위치 미정') : z;
-  return [base, it.spot].filter(Boolean).join(' › ');
+  return [placeName(it), it.spot].filter(Boolean).join(' › ');
 }
 function inSelection(it, sel) {
   if (!sel) return true;
@@ -161,7 +166,12 @@ function renderMap() {
       const cx = x + w / 2, cy = y + h / 2;
       inner += `<text class="store-name" x="${cx}" y="${cy}"${vertical ? ` transform="rotate(-90 ${cx} ${cy})"` : ''}>${esc(z.short || z.id)}</text>`;
       const dn = (direct.get(z.id) || []).length;
-      if (dn) inner += vertical ? badgeSVG(x + w / 2, y + 4, dn, worstTone(direct.get(z.id))) : badgeSVG(x + w - 4, y + 4, dn, worstTone(direct.get(z.id)));
+      if (dn) {
+        const tone = worstTone(direct.get(z.id));
+        inner += !vertical ? badgeSVG(x + w - 4, y + 4, dn, tone)
+          : z.badge === 'bottom' ? badgeSVG(x + w / 2, y + h - 4, dn, tone)
+          : badgeSVG(x + w / 2, y + 4, dn, tone);
+      }
     }
     return `<g class="${cls}" data-zone="${esc(z.id)}" tabindex="0" role="button" aria-pressed="${sel === z.id}" aria-label="${esc(label)}">${inner}</g>`;
   };
@@ -183,7 +193,7 @@ function itemRow(it, terms) {
   const n = daysLeft(it.expiry), s = statusOf(it);
   const qty = it.qty != null && Number(it.qty) !== 1 ? `<span class="qty">×${esc(it.qty)}</span>` : '';
   const z = zoneOf(it);
-  const tag = z === UNPLACED ? ((it.room || '').trim() || '위치 미정') : z;
+  const tag = placeName(it);
   const meta = [it.category ? hl(it.category, terms) : '', it.memo ? hl(it.memo, terms) : ''].filter(Boolean).join(' · ');
   return `<li><button type="button" class="item" data-id="${esc(it.id)}" aria-label="${esc(it.name)} 편집">
       <span class="body">
