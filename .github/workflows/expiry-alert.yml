@@ -1,0 +1,32 @@
+name: 유통기한 알림
+
+on:
+  schedule:
+    - cron: '0 23 * * *' # 매일 08:00 KST (UTC 23:00)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '알림을 보내지 않고 결과만 출력'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: 유통기한 확인 후 알림 보내기
+        run: node scripts/expiry-alert.mjs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          SITE_URL: ${{ vars.SITE_URL }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}

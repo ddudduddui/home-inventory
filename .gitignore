@@ -1,0 +1,12 @@
+# claude.ai 아티팩트 버전 (깃 관리 대상 아님)
+home-inventory.html
+
+# 로컬 비밀값
+.env
+.env.*
+
+# OS / 에디터
+.DS_Store
+Thumbs.db
+.vscode/
+.claude/
