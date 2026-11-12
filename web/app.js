@@ -164,7 +164,12 @@ function renderMap() {
       const [x, y, w, h] = z.rect;
       const vertical = h > w * 1.5;
       const cx = x + w / 2, cy = y + h / 2;
-      inner += `<text class="store-name" x="${cx}" y="${cy}"${vertical ? ` transform="rotate(-90 ${cx} ${cy})"` : ''}>${esc(z.short || z.id)}</text>`;
+      const lines = String(z.short || z.id).split('\n');
+      const cls = `store-name${z.small ? ' small' : ''}`;
+      const rot = vertical ? ` transform="rotate(-90 ${cx} ${cy})"` : '';
+      inner += lines.length === 1
+        ? `<text class="${cls}" x="${cx}" y="${cy}"${rot}>${esc(lines[0])}</text>`
+        : `<text class="${cls}" x="${cx}" y="${cy}"${rot}>${lines.map((l, i) => `<tspan x="${cx}" dy="${i === 0 ? -(lines.length - 1) * 11 : 22}">${esc(l)}</tspan>`).join('')}</text>`;
       const dn = (direct.get(z.id) || []).length;
       if (dn) {
         const tone = worstTone(direct.get(z.id));

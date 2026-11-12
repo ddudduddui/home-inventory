@@ -152,6 +152,7 @@ main { display: grid; gap: 14px; padding-block: 14px calc(100px + env(safe-area-
 .plan .room-count.soon { fill: var(--warn); font-weight: 700; }
 .plan .room-count.expired { fill: var(--danger); font-weight: 700; }
 .plan .store-name { font-family: var(--font-display); font-weight: 700; font-size: 23px; fill: var(--label-ink); }
+.plan .store-name.small { font-size: 19px; }
 .plan .badge circle { fill: var(--ink); stroke: var(--surface); stroke-width: 3; }
 .plan .badge text { fill: var(--surface); font-family: var(--font-mono); font-size: 18px; font-weight: 600; }
 .plan .badge.soon circle { fill: var(--warn); }

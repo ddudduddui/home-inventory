@@ -26,12 +26,18 @@ window.HOME_PLAN = {
     { id: '컴퓨터방 서랍장',  short: '서랍장',      kind: 'storage', room: '컴퓨터방', rect: [140, 175, 34, 245] },
     { id: '컴퓨터 책상 서랍', short: '책상 서랍',   kind: 'storage', room: '컴퓨터방', rect: [188, 384, 116, 36] },
     { id: '화장실 상부장',    short: '상부장',      kind: 'storage', room: '화장실',   rect: [700, 406, 34, 128] },
-    { id: '안방 붙박이장',    short: '붙박이장',    kind: 'storage', room: '안방',     rect: [739, 566, 40, 283] },
+    // 안방 붙박이장: 안에서 장을 바라볼 때 왼쪽(평면도 위쪽)부터 화장대 상부장·하부장, 1통, 2통, 3통
+    { id: '안방 화장대 상부장', short: '화장대\n상부장', small: true, kind: 'storage', room: '안방', rect: [713, 566, 66, 56] },
+    { id: '안방 화장대 하부장', short: '화장대\n하부장', small: true, kind: 'storage', room: '안방', rect: [713, 623, 66, 56] },
+    { id: '붙박이장 1통',       short: '1통',                       kind: 'storage', room: '안방', rect: [713, 680, 66, 56] },
+    { id: '붙박이장 2통',       short: '2통',                       kind: 'storage', room: '안방', rect: [713, 737, 66, 56] },
+    { id: '붙박이장 3통',       short: '3통',                       kind: 'storage', room: '안방', rect: [713, 794, 66, 55] },
     { id: '현관 신발장',      short: '신발장',      kind: 'storage', room: '현관',     rect: [171, 446, 88, 32] },
     { id: '베란다 창고',      short: '창고',        kind: 'storage', room: '베란다',   rect: [32, 872, 100, 96] },
   ],
   // 예전에 쓰던 구역 이름 → 지금 보여줄 구역. 구역을 나누거나 이름을 바꿨을 때, 예전 물건이 '위치 미지정'으로 빠지지 않게 해요.
   legacy: {
     '주방 상/하부장': '주방',
+    '안방 붙박이장': '안방',
   },
 };
