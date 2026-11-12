@@ -3,6 +3,6 @@
 // 데이터 보호는 supabase/schema.sql 의 RLS 정책(가족 명단)이 담당합니다.
 // service_role 키는 절대 여기에 넣지 마세요.
 window.APP_CONFIG = {
-  SUPABASE_URL: 'https://YOUR-PROJECT-REF.supabase.co',
-  SUPABASE_ANON_KEY: 'YOUR-ANON-KEY',
+  SUPABASE_URL: 'https://ryfqpwgpclygtfhlioxe.supabase.co',
+  SUPABASE_ANON_KEY: 'sb_publishable_PSt0QJ6QQ6pWp8E9UXrXtg_ev5R_RJN',
 };
