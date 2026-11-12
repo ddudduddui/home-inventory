@@ -86,8 +86,32 @@ function worstTone(list) {
   return '';
 }
 
+/* ---------- 선입선출: 같은 물건끼리 기한 빠른 것부터 ---------- */
+const normName = (s) => String(s || '').toLowerCase().replace(/\s+/g, '');
+const byExpiry = (a, b) => daysLeft(a.expiry) - daysLeft(b.expiry);
+// 이름이 같은 물건 중 유통기한이 있는 것들을 기한 순으로 묶어요. 2개 이상일 때만 순서가 의미 있어요.
+function computeFifo() {
+  const groups = new Map();
+  for (const it of state.items) {
+    if (daysLeft(it.expiry) === null) continue;
+    const k = normName(it.name);
+    if (!k) continue;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(it);
+  }
+  const info = new Map();
+  for (const list of groups.values()) {
+    if (list.length < 2) continue;
+    list.sort(byExpiry);
+    list.forEach((it, i) => info.set(it.id, { rank: i, total: list.length, first: list[0] }));
+  }
+  state.fifo = info;
+}
+const sameNameOthers = (name, exceptId) =>
+  state.items.filter((it) => it.id !== exceptId && normName(it.name) === normName(name) && normName(name));
+
 /* ---------- render ---------- */
-function render() { renderAlerts(); renderMap(); renderPanel(); }
+function render() { computeFifo(); renderAlerts(); renderMap(); renderPanel(); }
 
 function flaggedItems() {
   return state.items.filter((it) => ['expired', 'soon'].includes(statusOf(it)))
@@ -112,10 +136,18 @@ function renderAlerts() {
     (nSoon ? `<span class="pill soon">임박 ${nSoon}</span>` : '') +
     (!flagged.length && withExp.length ? `<span class="pill ok">모두 여유</span>` : '');
   const list = $('#alertList');
-  if (!state.loaded) { list.innerHTML = `<li class="alert-empty">불러오는 중…</li>`; return; }
-  if (!withExp.length) { list.innerHTML = `<li class="alert-empty">유통기한을 입력한 물건이 아직 없어요. 식료품을 추가할 때 날짜를 넣으면 여기서 챙겨드려요.</li>`; return; }
-  if (!flagged.length) { list.innerHTML = `<li class="alert-empty">${state.alertDays}일 안에 기한이 끝나는 물건이 없어요.</li>`; return; }
+  if (!state.loaded) { list.innerHTML = `<li class="alert-empty">불러오는 중…</li>`; renderNextUp(); return; }
+  if (!withExp.length) { list.innerHTML = `<li class="alert-empty">유통기한을 입력한 물건이 아직 없어요. 식료품을 추가할 때 날짜를 넣으면 여기서 챙겨드려요.</li>`; renderNextUp(); return; }
+  if (!flagged.length) { list.innerHTML = `<li class="alert-empty">${state.alertDays}일 안에 기한이 끝나는 물건이 없어요.</li>`; renderNextUp(); return; }
   list.innerHTML = flagged.map(alertRow).join('');
+  renderNextUp();
+}
+
+// 알림 기준 밖이지만 기한이 가까운 순서로 다음에 쓸 물건 3개
+function renderNextUp() {
+  const next = state.items.filter((it) => statusOf(it) === 'ok').sort(byExpiry).slice(0, 3);
+  $('#nextUp').hidden = !state.loaded || !next.length;
+  $('#nextList').innerHTML = next.map(alertRow).join('');
 }
 
 /* 평면도 */
@@ -200,10 +232,15 @@ function itemRow(it, terms) {
   const z = zoneOf(it);
   const tag = placeName(it);
   const meta = [it.category ? hl(it.category, terms) : '', it.memo ? hl(it.memo, terms) : ''].filter(Boolean).join(' · ');
+  const f = state.fifo?.get(it.id);
+  const fifoBadge = f && f.rank === 0 ? `<span class="fifo-badge">먼저 쓰기</span>` : '';
+  const fifoNote = f && f.rank > 0
+    ? `<span class="fifo-note">먼저 쓸 것: ${esc(whereText(f.first))} (${dLabel(daysLeft(f.first.expiry))})</span>` : '';
   return `<li><button type="button" class="item" data-id="${esc(it.id)}" aria-label="${esc(it.name)} 편집">
       <span class="body">
-        <span class="name">${hl(it.name, terms)}${qty}</span>
+        <span class="name">${hl(it.name, terms)}${qty}${fifoBadge}</span>
         <span class="loc"><span class="tag">${hl(tag, terms)}</span>${it.spot ? `<span class="spot">${hl(it.spot, terms)}</span>` : ''}</span>
+        ${fifoNote}
         ${meta ? `<span class="meta">${meta}</span>` : ''}
       </span>
       <span class="dd">${n === null ? '' : `<span class="pill ${s}">${dLabel(n)}</span><span class="date">${esc(it.expiry)}</span>`}</span>
@@ -336,7 +373,11 @@ function openSheet(item) {
   $('#f-memo').value = item?.memo || '';
   $('#formErr').hidden = true;
   const del = $('#delBtn'); del.hidden = !item; del.classList.remove('armed'); del.textContent = '다 썼어요 (삭제)';
+  const q = Number(item?.qty);
+  const use = $('#useBtn'); use.hidden = !item || !(q > 1); use.disabled = false;
+  if (!use.hidden) use.textContent = `1개 썼어요 (남은 ${q}개 → ${q - 1}개)`;
   syncSpots();
+  updateFifoHint();
   $('#scrim').hidden = false;
   setTimeout(() => $('#f-name').focus(), 30);
 }
@@ -347,12 +388,40 @@ function syncSpots() {
   $('#spotList').innerHTML = spots.map((s) => `<option value="${esc(s)}">`).join('');
 }
 
+// 같은 이름의 물건이 이미 있으면, 어디 있는지와 어느 것부터 쓸지 알려줘요.
+function updateFifoHint() {
+  const box = $('#fifoHint');
+  const name = $('#f-name').value.trim();
+  const others = name ? sameNameOthers(name, state.editing) : [];
+  if (!others.length) { box.hidden = true; box.innerHTML = ''; return; }
+  const dated = others.filter((it) => daysLeft(it.expiry) !== null).sort(byExpiry);
+  const shown = (dated.length ? dated : others).slice(0, 3);
+  const row = (it) => `<li>${esc(whereText(it))}${daysLeft(it.expiry) !== null ? ` <span class="pill ${statusOf(it)}">${dLabel(daysLeft(it.expiry))}</span>` : ''}${Number(it.qty) > 1 ? ` ×${esc(it.qty)}` : ''}</li>`;
+  const mine = daysLeft($('#f-expiry').value);
+  const earliest = dated[0];
+  let advice = '';
+  if (earliest && mine !== null) {
+    advice = mine < daysLeft(earliest.expiry)
+      ? (state.editing ? '이게 기한이 가장 빨라요. 이것부터 쓰세요.' : '새로 넣는 게 기한이 더 빨라요. 이것부터 쓰세요.')
+      : (state.editing ? `‘${esc(whereText(earliest))}’ 것을 먼저 쓰세요.` : '새 것은 안쪽·뒤쪽에 두고, 있던 것부터 쓰세요.');
+  } else if (earliest && !state.editing) {
+    advice = '유통기한을 넣으면 어느 것부터 쓸지 알려드려요.';
+  }
+  box.innerHTML = `<strong>${state.editing ? '같은 물건이 더 있어요' : '집에 같은 물건이 있어요'}</strong>
+    <ul>${shown.map(row).join('')}${others.length > shown.length ? `<li>외 ${others.length - shown.length}개</li>` : ''}</ul>
+    ${advice ? `<p>${advice}</p>` : ''}`;
+  box.hidden = false;
+}
+let hintTimer;
+$('#f-name').addEventListener('input', () => { clearTimeout(hintTimer); hintTimer = setTimeout(updateFifoHint, 150); });
+$('#f-expiry').addEventListener('change', updateFifoHint);
 $('#f-room').addEventListener('change', syncSpots);
 $('#qtyMinus').addEventListener('click', () => { $('#f-qty').value = Math.max(0, (Number($('#f-qty').value) || 0) - 1); });
 $('#qtyPlus').addEventListener('click', () => { $('#f-qty').value = (Number($('#f-qty').value) || 0) + 1; });
 document.querySelectorAll('.quick button').forEach((b) => b.addEventListener('click', () => {
   if (b.dataset.add === '') { $('#f-expiry').value = ''; return; }
   const d = today0(); d.setDate(d.getDate() + Number(b.dataset.add)); $('#f-expiry').value = fmtDate(d);
+  updateFifoHint();
 }));
 $('#cancelBtn').addEventListener('click', closeSheet);
 $('#scrim').addEventListener('click', (e) => { if (e.target === $('#scrim')) closeSheet(); });
@@ -394,9 +463,36 @@ $('#delBtn').addEventListener('click', async () => {
   if (!b.classList.contains('armed')) { b.classList.add('armed'); b.textContent = '한 번 더 누르면 삭제'; return; }
   if (!state.editing) return;
   const name = state.items.find((it) => it.id === state.editing)?.name || '';
+  const nextHint = nextOfText(name, state.editing);
   const { error } = await sb.from('items').delete().eq('id', state.editing);
   if (error) { $('#formErr').textContent = '삭제하지 못했어요.'; $('#formErr').hidden = false; return; }
-  closeSheet(); toast(`‘${name}’ 삭제했어요`); loadItems();
+  closeSheet(); toast(`‘${name}’ 다 썼어요${nextHint}`); loadItems();
+});
+
+// 하나를 다 썼을 때 다음에 쓸 같은 물건 안내
+function nextOfText(name, exceptId) {
+  const next = sameNameOthers(name, exceptId).filter((it) => daysLeft(it.expiry) !== null).sort(byExpiry)[0]
+    || sameNameOthers(name, exceptId)[0];
+  return next ? ` · 다음은 ${whereText(next)}${daysLeft(next.expiry) !== null ? ` (${dLabel(daysLeft(next.expiry))})` : ''}` : '';
+}
+
+// 수량 하나만 줄이기 (여러 개 있는 물건)
+$('#useBtn').addEventListener('click', async () => {
+  const it = state.items.find((x) => x.id === state.editing);
+  if (!it) return;
+  const left = Math.max(0, Number(it.qty) - 1);
+  $('#useBtn').disabled = true;
+  const { error } = await sb.from('items').update({ qty: left }).eq('id', it.id);
+  $('#useBtn').disabled = false;
+  if (error) { $('#formErr').textContent = dbErrorText(error); $('#formErr').hidden = false; return; }
+  closeSheet(); toast(`‘${it.name}’ 1개 썼어요 · 남은 ${left}개`); loadItems();
+});
+
+// 홈의 '기한 순서 전체 보기': 유통기한 있는 물건만, 기한 빠른 순으로
+$('#fifoAllBtn').addEventListener('click', () => {
+  state.foodOnly = true; state.sort = 'expiry'; state.selected = null;
+  renderMap(); renderPanel();
+  $('.zone-panel').scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
 });
 
 /* ---------- interactions ---------- */
