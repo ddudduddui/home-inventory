@@ -153,6 +153,18 @@ main { display: grid; gap: 22px; padding-block: 20px 60px; }
 .zone-panel .items { grid-template-columns: 1fr; }
 @media (min-width: 600px) and (max-width: 899px) { .zone-panel .items { grid-template-columns: 1fr 1fr; } }
 
+.plan-body { display: grid; gap: 10px; }
+.plan-title { flex: 1; min-width: 0; }
+.plan-toggle { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: 0; padding: 4px 0; text-align: left; font: inherit; color: inherit; }
+.plan-toggle .chev { color: var(--accent); flex: none; transition: transform .15s; transform: rotate(-90deg); }
+.plan-toggle[aria-expanded="true"] .chev { transform: none; }
+.plan-hint { font-family: var(--font-body); font-weight: 400; font-size: 12px; color: var(--muted); }
+@media (min-width: 900px) {
+  .plan-layout.collapsed { grid-template-columns: 1fr; }
+  .plan-layout.collapsed .plan-card { position: static; }
+}
+@media (prefers-reduced-motion: reduce) { .plan-toggle .chev { transition: none; } }
+
 /* list */
 .list-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .list-head h2 { font-family: var(--font-display); font-size: 16px; margin: 0; }

@@ -161,7 +161,7 @@ function renderMap() {
       const cx = x + w / 2, cy = y + h / 2;
       inner += `<text class="store-name" x="${cx}" y="${cy}"${vertical ? ` transform="rotate(-90 ${cx} ${cy})"` : ''}>${esc(z.short || z.id)}</text>`;
       const dn = (direct.get(z.id) || []).length;
-      if (dn) inner += vertical ? badgeSVG(x + w + 18, y + 18, dn, worstTone(direct.get(z.id))) : badgeSVG(x + w - 4, y + 4, dn, worstTone(direct.get(z.id)));
+      if (dn) inner += vertical ? badgeSVG(x + w / 2, y + 4, dn, worstTone(direct.get(z.id))) : badgeSVG(x + w - 4, y + 4, dn, worstTone(direct.get(z.id)));
     }
     return `<g class="${cls}" data-zone="${esc(z.id)}" tabindex="0" role="button" aria-pressed="${sel === z.id}" aria-label="${esc(label)}">${inner}</g>`;
   };
@@ -389,6 +389,13 @@ $('#delBtn').addEventListener('click', async () => {
 $('#addBtn').addEventListener('click', () => openSheet(null));
 $('#panelAdd').addEventListener('click', () => openSheet(null));
 $('#allBtn').addEventListener('click', () => { state.selected = null; renderMap(); renderPanel(); });
+function setPlanOpen(open) {
+  $('#planBody').hidden = !open;
+  $('#planToggle').setAttribute('aria-expanded', String(open));
+  $('#planLayout').classList.toggle('collapsed', !open);
+  $('#planHint').textContent = open ? '눌러서 접기' : '눌러서 펼치기';
+}
+$('#planToggle').addEventListener('click', () => setPlanOpen($('#planBody').hidden));
 $('#unplacedBtn').addEventListener('click', () => selectZone(UNPLACED));
 $('#foodToggle').addEventListener('click', () => { state.foodOnly = !state.foodOnly; renderMap(); renderPanel(); });
 let qTimer;

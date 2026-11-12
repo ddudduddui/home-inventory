@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+KR:wght@500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap">
-<link rel="stylesheet" href="styles.css?v=202611121300">
+<link rel="stylesheet" href="styles.css?v=202611121400">
 </head>
 <body>
 
@@ -75,14 +75,22 @@
       <ul class="alert-list" id="alertList"></ul>
     </section>
 
-    <div class="plan-layout">
+    <div class="plan-layout collapsed" id="planLayout">
       <section class="plan-card" aria-labelledby="planTitle">
         <div class="plan-head">
-          <h2 id="planTitle">우리집 평면도</h2>
+          <h2 id="planTitle" class="plan-title">
+            <button type="button" class="plan-toggle" id="planToggle" aria-expanded="false" aria-controls="planBody">
+              <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+              우리집 평면도
+              <span class="plan-hint" id="planHint">눌러서 펼치기</span>
+            </button>
+          </h2>
           <button type="button" class="btn ghost small" id="allBtn">집 전체 보기</button>
         </div>
-        <div class="plan" id="plan" role="group" aria-label="구역을 누르면 그 자리의 물건이 보여요"></div>
-        <button type="button" class="chip unplaced" id="unplacedBtn" hidden></button>
+        <div class="plan-body" id="planBody" hidden>
+          <div class="plan" id="plan" role="group" aria-label="구역을 누르면 그 자리의 물건이 보여요"></div>
+          <button type="button" class="chip unplaced" id="unplacedBtn" hidden></button>
+        </div>
       </section>
 
       <section class="zone-panel" aria-labelledby="listTitle">
@@ -226,8 +234,8 @@
 <div class="toast" id="toast" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.50.0/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=202611121300"></script>
-<script src="zones.js?v=202611121300"></script>
-<script src="app.js?v=202611121300"></script>
+<script src="config.js?v=202611121400"></script>
+<script src="zones.js?v=202611121400"></script>
+<script src="app.js?v=202611121400"></script>
 </body>
 </html>
