@@ -10,7 +10,26 @@ web/                       정적 사이트 (index.html, styles.css, app.js, con
 supabase/schema.sql        테이블·보안 정책
 .github/workflows/pages.yml      main 에 푸시하면 web/ 게시
 .github/workflows/keepalive.yml  사흘마다 Supabase 에 요청 (무료 프로젝트 일시 중지 방지)
+dev/                       로컬 미리보기 (python dev/preview.py, 가짜 데이터, 게시 안 됨)
+CLAUDE.md                  Claude Code 작업 메모
 ```
+
+## 다른 PC에서 이어서 작업하기
+설정(Supabase, GitHub Pages, Secrets)은 이미 끝나 있으니 소스만 받으면 돼요.
+
+1. [Git](https://git-scm.com), [GitHub CLI](https://cli.github.com), Python 3 를 설치합니다.
+2. GitHub 로그인 후 저장소를 받습니다.
+   ```bash
+   gh auth login
+   gh repo clone ddudduddui/home-inventory
+   ```
+3. 받은 폴더를 Claude Code로 엽니다. 작업 규칙과 지금까지의 결정은 `CLAUDE.md`에 정리돼 있어요.
+4. 화면 확인은 가짜 데이터로 로컬에서 할 수 있어요 (실제 데이터는 건드리지 않아요).
+   ```bash
+   python dev/preview.py
+   ```
+   → http://localhost:8765
+5. 고친 뒤 `main`에 푸시하면 자동으로 게시돼요. 두 PC를 번갈아 쓸 때는 작업 전에 `git pull` 부터 하세요.
 
 ## 처음 설정하기
 
