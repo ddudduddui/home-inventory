@@ -140,6 +140,10 @@ mark { background: var(--accent-soft); color: inherit; border-radius: 3px; paddi
 .quick button { font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; }
 .actions .right { display: flex; gap: 8px; margin-left: auto; }
+.exp-title { display: flex; align-items: center; gap: 8px; }
+.exp-title svg { color: var(--warn); flex: none; }
+.exp-list { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; max-height: 50vh; overflow-y: auto; }
+.exp-list .alert-row { padding-inline: 12px; }
 .err { color: var(--danger); font-size: 13px; margin: 0; }
 .toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 16px; border-radius: 999px; font-size: 14px; z-index: 30; }
 @media (prefers-reduced-motion: no-preference) { .scrim .sheet { animation: up .18s ease-out; } @keyframes up { from { transform: translateY(16px); opacity: .6; } } }

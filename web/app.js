@@ -49,10 +49,47 @@ function show(view) {
 /* ---------- render ---------- */
 function render() { renderAlerts(); renderFilters(); renderList(); }
 
+function flaggedItems() {
+  return state.items.filter((it) => ['expired', 'soon'].includes(statusOf(it)))
+    .sort((a, b) => daysLeft(a.expiry) - daysLeft(b.expiry));
+}
+function alertRow(it) {
+  const n = daysLeft(it.expiry), s = statusOf(it);
+  return `<li><button type="button" class="alert-row" data-id="${esc(it.id)}">
+      <span class="pill ${s}">${dLabel(n)}</span>
+      <span><strong>${esc(it.name)}</strong> <span class="where">· ${esc([it.room, it.spot].filter(Boolean).join(' › ') || '위치 미정')}</span></span>
+      <span class="date">${esc(it.expiry)}</span>
+    </button></li>`;
+}
+
+/* 접속했을 때 한 번 띄우는 유통기한 팝업 (브라우저 탭마다 하루 한 번) */
+function maybeShowExpiryPopup() {
+  const flagged = flaggedItems();
+  if (!flagged.length) return;
+  const key = 'expPopup:' + fmtDate(today0());
+  try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, '1'); } catch {}
+  const nExp = flagged.filter((it) => statusOf(it) === 'expired').length;
+  const nSoon = flagged.length - nExp;
+  $('#expSummary').textContent = [
+    nExp ? `기한이 지난 물건 ${nExp}개` : '',
+    nSoon ? `${state.alertDays}일 안에 기한이 끝나는 물건 ${nSoon}개` : '',
+  ].filter(Boolean).join(', ') + '가 있어요. 누르면 편집할 수 있어요.';
+  $('#expList').innerHTML = flagged.map(alertRow).join('');
+  $('#expScrim').hidden = false;
+  setTimeout(() => $('#expOk').focus(), 30);
+}
+function closeExp() { $('#expScrim').hidden = true; }
+$('#expOk').addEventListener('click', closeExp);
+$('#expScrim').addEventListener('click', (e) => {
+  if (e.target === $('#expScrim')) { closeExp(); return; }
+  const row = e.target.closest('[data-id]');
+  if (row) { closeExp(); const it = state.items.find((x) => x.id === row.dataset.id); if (it) openSheet(it); }
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#expScrim').hidden) closeExp(); });
+
 function renderAlerts() {
   const withExp = state.items.filter((it) => daysLeft(it.expiry) !== null);
-  const flagged = withExp.filter((it) => ['expired', 'soon'].includes(statusOf(it)))
-    .sort((a, b) => daysLeft(a.expiry) - daysLeft(b.expiry));
+  const flagged = flaggedItems();
   const nExp = flagged.filter((it) => statusOf(it) === 'expired').length;
   const nSoon = flagged.length - nExp;
   $('#alertCounts').innerHTML =
@@ -63,14 +100,7 @@ function renderAlerts() {
   if (!state.loaded) { list.innerHTML = `<li class="alert-empty">불러오는 중…</li>`; return; }
   if (!withExp.length) { list.innerHTML = `<li class="alert-empty">유통기한을 입력한 물건이 아직 없어요. 식료품을 추가할 때 날짜를 넣으면 여기서 챙겨드려요.</li>`; return; }
   if (!flagged.length) { list.innerHTML = `<li class="alert-empty">${state.alertDays}일 안에 기한이 끝나는 물건이 없어요.</li>`; return; }
-  list.innerHTML = flagged.map((it) => {
-    const n = daysLeft(it.expiry), s = statusOf(it);
-    return `<li><button type="button" class="alert-row" data-id="${esc(it.id)}">
-      <span class="pill ${s}">${dLabel(n)}</span>
-      <span><strong>${esc(it.name)}</strong> <span class="where">· ${esc([it.room, it.spot].filter(Boolean).join(' › ') || '위치 미정')}</span></span>
-      <span class="date">${esc(it.expiry)}</span>
-    </button></li>`;
-  }).join('');
+  list.innerHTML = flagged.map(alertRow).join('');
 }
 
 function roomOf(it) { return (it.room || '').trim() || '위치 미정'; }
@@ -236,7 +266,7 @@ document.addEventListener('click', (e) => {
   const chip = e.target.closest('.chip');
   if (chip) { state.room = chip.dataset.room; renderFilters(); renderList(); return; }
   const row = e.target.closest('[data-id]');
-  if (row && !row.closest('#scrim')) { const it = state.items.find((x) => x.id === row.dataset.id); if (it) openSheet(it); return; }
+  if (row && !row.closest('.scrim')) { const it = state.items.find((x) => x.id === row.dataset.id); if (it) openSheet(it); return; }
   if (e.target.closest('[data-action="add"]')) openSheet(null);
 });
 document.addEventListener('change', (e) => {
@@ -356,6 +386,7 @@ async function enterApp(session) {
   show('appView');
   render();
   await Promise.all([loadItems(), loadSettings()]);
+  maybeShowExpiryPopup();
   if (!state.channel) {
     state.channel = sb.channel('household')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'items' }, scheduleReload)

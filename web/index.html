@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+KR:wght@500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap">
-<link rel="stylesheet" href="styles.css?v=202611121009">
+<link rel="stylesheet" href="styles.css?v=202611121030">
 </head>
 <body>
 
@@ -179,10 +179,25 @@
     </div>
   </form>
 </div>
+<div class="scrim" id="expScrim" hidden>
+  <div class="sheet" role="alertdialog" aria-modal="true" aria-labelledby="expTitle" aria-describedby="expSummary">
+    <h3 id="expTitle" class="exp-title">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+      유통기한을 확인해 주세요
+    </h3>
+    <p class="note" id="expSummary" style="margin:0"></p>
+    <ul class="alert-list exp-list" id="expList"></ul>
+    <div class="actions">
+      <div class="right">
+        <button type="button" class="btn primary" id="expOk">확인</button>
+      </div>
+    </div>
+  </div>
+</div>
 <div class="toast" id="toast" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.50.0/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=202611121009"></script>
-<script src="app.js?v=202611121009"></script>
+<script src="config.js?v=202611121030"></script>
+<script src="app.js?v=202611121030"></script>
 </body>
 </html>
