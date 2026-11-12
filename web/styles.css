@@ -140,6 +140,9 @@ mark { background: var(--accent-soft); color: inherit; border-radius: 3px; paddi
 .quick button { font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; }
 .actions .right { display: flex; gap: 8px; margin-left: auto; }
+.set-group { display: grid; gap: 6px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.sheet h4 { margin: 0; font-family: var(--font-display); font-size: 14px; }
+.sheet .alert-days { color: var(--ink); font-size: 14px; flex-wrap: wrap; }
 .exp-title { display: flex; align-items: center; gap: 8px; }
 .exp-title svg { color: var(--warn); flex: none; }
 .exp-list { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; max-height: 50vh; overflow-y: auto; }

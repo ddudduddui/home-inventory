@@ -62,12 +62,16 @@ function alertRow(it) {
     </button></li>`;
 }
 
-/* 접속했을 때 한 번 띄우는 유통기한 팝업 (브라우저 탭마다 하루 한 번) */
+/* 접속했을 때 띄우는 유통기한 팝업: 브라우저 탭마다 한 번, '오늘 하루 보지 않기'를 누르면 그날은 안 띄움 */
 function maybeShowExpiryPopup() {
   const flagged = flaggedItems();
   if (!flagged.length) return;
-  const key = 'expPopup:' + fmtDate(today0());
-  try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, '1'); } catch {}
+  const today = fmtDate(today0());
+  try {
+    if (localStorage.getItem('expPopupHiddenOn') === today) return;
+    if (sessionStorage.getItem('expPopupShown')) return;
+    sessionStorage.setItem('expPopupShown', '1');
+  } catch {}
   const nExp = flagged.filter((it) => statusOf(it) === 'expired').length;
   const nSoon = flagged.length - nExp;
   $('#expSummary').textContent = [
@@ -80,6 +84,11 @@ function maybeShowExpiryPopup() {
 }
 function closeExp() { $('#expScrim').hidden = true; }
 $('#expOk').addEventListener('click', closeExp);
+$('#expHideToday').addEventListener('click', () => {
+  try { localStorage.setItem('expPopupHiddenOn', fmtDate(today0())); } catch {}
+  closeExp();
+  toast('오늘은 알림 팝업을 띄우지 않을게요');
+});
 $('#expScrim').addEventListener('click', (e) => {
   if (e.target === $('#expScrim')) { closeExp(); return; }
   const row = e.target.closest('[data-id]');
