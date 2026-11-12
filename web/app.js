@@ -1,9 +1,16 @@
 'use strict';
 
 const CATS = ['식료품', '의약품', '생활용품', '주방용품', '공구', '전자기기', '의류', '서류·귀중품', '기타'];
+const UNPLACED = '__unplaced';
+const PLAN = window.HOME_PLAN || { viewBox: '0 0 800 1000', zones: [] };
+const ZONES = PLAN.zones;
+const ZONE = new Map(ZONES.map((z) => [z.id, z]));
+const ROOMS = ZONES.filter((z) => z.kind === 'room');
+const childrenOf = (roomId) => ZONES.filter((z) => z.room === roomId);
+
 const $ = (s) => document.querySelector(s);
 const state = {
-  items: [], alertDays: 3, q: '', room: '__all', sort: 'recent',
+  items: [], alertDays: 3, q: '', selected: null, foodOnly: false, sort: 'recent',
   loaded: false, editing: null, session: null, channel: null,
 };
 
@@ -42,12 +49,40 @@ function show(view) {
   const inApp = view === 'appView';
   $('#searchBox').hidden = !inApp;
   $('#addBtn').hidden = !inApp;
-  $('#signOutBtn').hidden = view === 'loginView' || !view;
   $('#pwBtn').hidden = !inApp;
 }
 
+/* ---------- zones ---------- */
+const zoneOf = (it) => (ZONE.has((it.room || '').trim()) ? it.room.trim() : UNPLACED);
+const roomOfZone = (zid) => (ZONE.get(zid)?.kind === 'storage' ? ZONE.get(zid).room : zid);
+function whereText(it) {
+  const z = zoneOf(it);
+  const base = z === UNPLACED ? ((it.room || '').trim() || '위치 미정') : z;
+  return [base, it.spot].filter(Boolean).join(' › ');
+}
+function inSelection(it, sel) {
+  if (!sel) return true;
+  const z = zoneOf(it);
+  if (sel === UNPLACED) return z === UNPLACED;
+  if (ZONE.get(sel)?.kind === 'room') return z === sel || roomOfZone(z) === sel;
+  return z === sel;
+}
+function termsOf() { return state.q.toLowerCase().split(/\s+/).filter(Boolean); }
+const isFoodish = (it) => daysLeft(it.expiry) !== null || it.category === '식료품';
+function passesFilters(it, terms) {
+  if (state.foodOnly && !isFoodish(it)) return false;
+  if (!terms.length) return true;
+  const hay = [it.name, it.room, it.spot, it.memo, it.category, roomOfZone(zoneOf(it))].join(' ').toLowerCase();
+  return terms.every((t) => hay.includes(t));
+}
+function worstTone(list) {
+  if (list.some((it) => statusOf(it) === 'expired')) return 'expired';
+  if (list.some((it) => statusOf(it) === 'soon')) return 'soon';
+  return '';
+}
+
 /* ---------- render ---------- */
-function render() { renderAlerts(); renderFilters(); renderList(); }
+function render() { renderAlerts(); renderMap(); renderPanel(); }
 
 function flaggedItems() {
   return state.items.filter((it) => ['expired', 'soon'].includes(statusOf(it)))
@@ -57,9 +92,174 @@ function alertRow(it) {
   const n = daysLeft(it.expiry), s = statusOf(it);
   return `<li><button type="button" class="alert-row" data-id="${esc(it.id)}">
       <span class="pill ${s}">${dLabel(n)}</span>
-      <span><strong>${esc(it.name)}</strong> <span class="where">· ${esc([it.room, it.spot].filter(Boolean).join(' › ') || '위치 미정')}</span></span>
+      <span><strong>${esc(it.name)}</strong> <span class="where">· ${esc(whereText(it))}</span></span>
       <span class="date">${esc(it.expiry)}</span>
     </button></li>`;
+}
+
+function renderAlerts() {
+  const withExp = state.items.filter((it) => daysLeft(it.expiry) !== null);
+  const flagged = flaggedItems();
+  const nExp = flagged.filter((it) => statusOf(it) === 'expired').length;
+  const nSoon = flagged.length - nExp;
+  $('#alertCounts').innerHTML =
+    (nExp ? `<span class="pill expired">지남 ${nExp}</span>` : '') +
+    (nSoon ? `<span class="pill soon">임박 ${nSoon}</span>` : '') +
+    (!flagged.length && withExp.length ? `<span class="pill ok">모두 여유</span>` : '');
+  const list = $('#alertList');
+  if (!state.loaded) { list.innerHTML = `<li class="alert-empty">불러오는 중…</li>`; return; }
+  if (!withExp.length) { list.innerHTML = `<li class="alert-empty">유통기한을 입력한 물건이 아직 없어요. 식료품을 추가할 때 날짜를 넣으면 여기서 챙겨드려요.</li>`; return; }
+  if (!flagged.length) { list.innerHTML = `<li class="alert-empty">${state.alertDays}일 안에 기한이 끝나는 물건이 없어요.</li>`; return; }
+  list.innerHTML = flagged.map(alertRow).join('');
+}
+
+/* 평면도 */
+function zoneCenter(z) {
+  if (z.label) return z.label;
+  const [x, y, w, h] = z.rect;
+  return [x + w / 2, y + h / 2];
+}
+function shapeSVG(z) {
+  if (z.rect) {
+    const [x, y, w, h] = z.rect;
+    return `<rect class="shape" x="${x}" y="${y}" width="${w}" height="${h}" rx="${z.kind === 'storage' ? 4 : 0}"/>`;
+  }
+  return `<polygon class="shape" points="${z.points}"/>`;
+}
+function badgeSVG(cx, cy, n, tone) {
+  return `<g class="badge ${tone}" aria-hidden="true"><circle cx="${cx}" cy="${cy}" r="17"/><text x="${cx}" y="${cy}">${n > 99 ? '99+' : n}</text></g>`;
+}
+
+function renderMap() {
+  const terms = termsOf();
+  const searching = terms.length > 0 || state.foodOnly;
+  const visible = state.items.filter((it) => passesFilters(it, terms));
+  const direct = new Map();
+  for (const it of visible) { const z = zoneOf(it); if (!direct.has(z)) direct.set(z, []); direct.get(z).push(it); }
+  const totalOf = (z) => z.kind === 'room'
+    ? [...(direct.get(z.id) || []), ...childrenOf(z.id).flatMap((c) => direct.get(c.id) || [])]
+    : (direct.get(z.id) || []);
+
+  const sel = state.selected;
+  const selRoom = sel && sel !== UNPLACED ? roomOfZone(sel) : null;
+  const zoneG = (z) => {
+    const list = totalOf(z);
+    const n = list.length;
+    const cls = ['zone', z.kind, z.balcony ? 'balcony' : '', z.tile ? 'tile' : '',
+      sel === z.id ? 'selected' : '', selRoom === z.id && sel !== z.id ? 'parent' : '',
+      searching ? (n ? 'hit' : 'dim') : ''].filter(Boolean).join(' ');
+    const label = `${z.id}, 물건 ${n}개${worstTone(list) === 'expired' ? ', 기한 지난 물건 있음' : worstTone(list) === 'soon' ? ', 기한 임박 물건 있음' : ''}`;
+    let inner = shapeSVG(z);
+    if (z.kind === 'room') {
+      const [cx, cy] = zoneCenter(z);
+      const tone = worstTone(list);
+      inner += `<text class="room-name${z.small ? ' small' : ''}" x="${cx}" y="${cy - 10}">${esc(z.id)}</text>`;
+      inner += `<text class="room-count ${tone}" x="${cx}" y="${cy + 22}">${n ? `${n}개` : '비어 있음'}</text>`;
+    } else {
+      const [x, y, w, h] = z.rect;
+      const vertical = h > w * 1.5;
+      const cx = x + w / 2, cy = y + h / 2;
+      inner += `<text class="store-name" x="${cx}" y="${cy}"${vertical ? ` transform="rotate(-90 ${cx} ${cy})"` : ''}>${esc(z.short || z.id)}</text>`;
+      const dn = (direct.get(z.id) || []).length;
+      if (dn) inner += vertical ? badgeSVG(x + w + 18, y + 18, dn, worstTone(direct.get(z.id))) : badgeSVG(x + w - 4, y + 4, dn, worstTone(direct.get(z.id)));
+    }
+    return `<g class="${cls}" data-zone="${esc(z.id)}" tabindex="0" role="button" aria-pressed="${sel === z.id}" aria-label="${esc(label)}">${inner}</g>`;
+  };
+  $('#plan').innerHTML = `<svg viewBox="${PLAN.viewBox}" xmlns="http://www.w3.org/2000/svg">
+    ${ROOMS.map(zoneG).join('')}
+    ${ZONES.filter((z) => z.kind === 'storage').map(zoneG).join('')}
+  </svg>`;
+
+  const unplaced = direct.get(UNPLACED) || [];
+  const ub = $('#unplacedBtn');
+  ub.hidden = !unplaced.length;
+  ub.setAttribute('aria-pressed', String(sel === UNPLACED));
+  ub.innerHTML = `위치 미지정<span class="n">${unplaced.length}</span>`;
+  $('#allBtn').hidden = !sel;
+}
+
+/* 오른쪽(아래쪽) 목록 */
+function itemRow(it, terms) {
+  const n = daysLeft(it.expiry), s = statusOf(it);
+  const qty = it.qty != null && Number(it.qty) !== 1 ? `<span class="qty">×${esc(it.qty)}</span>` : '';
+  const z = zoneOf(it);
+  const tag = z === UNPLACED ? ((it.room || '').trim() || '위치 미정') : z;
+  return `<li><button type="button" class="item" data-id="${esc(it.id)}" aria-label="${esc(it.name)} 편집">
+      <span class="tag">${hl(tag, terms)}</span>
+      <span class="body">
+        <div class="name">${hl(it.name, terms)}${qty}</div>
+        ${it.spot ? `<div class="spot">${hl(it.spot, terms)}</div>` : ''}
+        ${it.memo ? `<div class="memo">${hl(it.memo, terms)}</div>` : ''}
+        ${it.category ? `<div class="cat">${hl(it.category, terms)}</div>` : ''}
+      </span>
+      <span class="dd">${n === null ? '' : `<span class="pill ${s}">${dLabel(n)}</span><span class="date">${esc(it.expiry)}</span>`}</span>
+    </button></li>`;
+}
+
+function renderPanel() {
+  const ul = $('#items');
+  const terms = termsOf();
+  const sel = state.selected;
+  const z = sel && sel !== UNPLACED ? ZONE.get(sel) : null;
+
+  $('#panelEyebrow').textContent = !sel ? (terms.length ? '검색 결과' : '집 전체')
+    : sel === UNPLACED ? '구역이 정해지지 않은 물건'
+    : z.kind === 'storage' ? `${z.room} 안의 수납장` : (childrenOf(z.id).length ? `${childrenOf(z.id).map((c) => c.id).join(', ')} 포함` : '방');
+  $('#listTitle').textContent = !sel ? (terms.length ? `‘${state.q}’` : '모든 물건') : sel === UNPLACED ? '위치 미지정' : sel;
+  $('#panelAdd').hidden = sel === UNPLACED;
+  $('#panelAdd').textContent = sel && sel !== UNPLACED ? `＋ ${sel}에 추가` : '＋ 물건 추가';
+  $('#foodToggle').setAttribute('aria-pressed', String(state.foodOnly));
+  $('#sort').value = state.sort;
+
+  if (!state.loaded) { ul.innerHTML = ''; $('#listCount').textContent = ''; return; }
+  if (!state.items.length) {
+    ul.innerHTML = `<li class="empty">
+      <strong>아직 등록된 물건이 없어요</strong>
+      <span>평면도에서 방이나 수납장을 누른 뒤 ‘여기에 추가’로 첫 물건을 넣어 보세요.</span>
+      <button type="button" class="btn primary" data-action="add">물건 추가</button>
+    </li>`;
+    $('#listCount').textContent = '';
+    return;
+  }
+
+  const rows = state.items.filter((it) => inSelection(it, sel) && passesFilters(it, terms));
+  const byName = (a, b) => (a.name || '').localeCompare(b.name || '', 'ko');
+  const sorters = {
+    recent: (a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')),
+    name: byName,
+    expiry: (a, b) => (daysLeft(a.expiry) ?? 1e9) - (daysLeft(b.expiry) ?? 1e9) || byName(a, b),
+  };
+  rows.sort(sorters[state.sort] || sorters.recent);
+  $('#listCount').textContent = `${rows.length}개`;
+
+  if (!rows.length) {
+    const what = terms.length ? `‘${esc(state.q)}’에 맞는 물건이 없어요` : state.foodOnly ? '유통기한 있는 물건이 없어요' : '아직 여기에 둔 물건이 없어요';
+    ul.innerHTML = `<li class="empty"><strong>${what}</strong>
+      <span>${sel && sel !== UNPLACED && !terms.length ? `‘${esc(sel)}’에 무엇이 있는지 적어 두세요.` : '다른 이름이나 구역으로 찾아보세요.'}</span>
+      ${sel && sel !== UNPLACED && !terms.length ? `<button type="button" class="btn primary" data-action="add">${esc(sel)}에 추가</button>` : ''}
+    </li>`;
+    return;
+  }
+
+  // 방을 골랐으면 방 바닥 / 수납장별로 묶어서 보여줌
+  if (z && z.kind === 'room' && childrenOf(z.id).length) {
+    const groups = [z.id, ...childrenOf(z.id).map((c) => c.id)]
+      .map((gid) => [gid, rows.filter((it) => zoneOf(it) === gid)])
+      .filter(([, list]) => list.length);
+    ul.innerHTML = groups.map(([gid, list]) =>
+      `<li class="group-head"><button type="button" class="linklike" data-zone-pick="${esc(gid)}">${esc(gid === z.id ? `${gid} (수납장 밖)` : gid)}</button><span class="n">${list.length}</span></li>` +
+      list.map((it) => itemRow(it, terms)).join('')).join('');
+    return;
+  }
+  ul.innerHTML = rows.map((it) => itemRow(it, terms)).join('');
+}
+
+function selectZone(id) {
+  state.selected = state.selected === id ? null : id;
+  renderMap(); renderPanel();
+  if (state.selected && window.matchMedia('(max-width: 899px)').matches) {
+    $('.zone-panel').scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+  }
 }
 
 /* 접속했을 때 띄우는 유통기한 팝업: 브라우저 탭마다 한 번, '오늘 하루 보지 않기'를 누르면 그날은 안 띄움 */
@@ -94,110 +294,29 @@ $('#expScrim').addEventListener('click', (e) => {
   const row = e.target.closest('[data-id]');
   if (row) { closeExp(); const it = state.items.find((x) => x.id === row.dataset.id); if (it) openSheet(it); }
 });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#expScrim').hidden) closeExp(); });
-
-function renderAlerts() {
-  const withExp = state.items.filter((it) => daysLeft(it.expiry) !== null);
-  const flagged = flaggedItems();
-  const nExp = flagged.filter((it) => statusOf(it) === 'expired').length;
-  const nSoon = flagged.length - nExp;
-  $('#alertCounts').innerHTML =
-    (nExp ? `<span class="pill expired">지남 ${nExp}</span>` : '') +
-    (nSoon ? `<span class="pill soon">임박 ${nSoon}</span>` : '') +
-    (!flagged.length && withExp.length ? `<span class="pill ok">모두 여유</span>` : '');
-  const list = $('#alertList');
-  if (!state.loaded) { list.innerHTML = `<li class="alert-empty">불러오는 중…</li>`; return; }
-  if (!withExp.length) { list.innerHTML = `<li class="alert-empty">유통기한을 입력한 물건이 아직 없어요. 식료품을 추가할 때 날짜를 넣으면 여기서 챙겨드려요.</li>`; return; }
-  if (!flagged.length) { list.innerHTML = `<li class="alert-empty">${state.alertDays}일 안에 기한이 끝나는 물건이 없어요.</li>`; return; }
-  list.innerHTML = flagged.map(alertRow).join('');
-}
-
-function roomOf(it) { return (it.room || '').trim() || '위치 미정'; }
-function rooms() {
-  const m = new Map();
-  for (const it of state.items) { const r = roomOf(it); m.set(r, (m.get(r) || 0) + 1); }
-  return [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ko'));
-}
-const isFoodish = (it) => daysLeft(it.expiry) !== null || it.category === '식료품';
-
-function renderFilters() {
-  const rs = rooms();
-  if (!state.room.startsWith('__') && !rs.some(([r]) => r === state.room)) state.room = '__all';
-  const chip = (key, label, n) => `<button type="button" class="chip" data-room="${esc(key)}" aria-pressed="${state.room === key}">${esc(label)}<span class="n">${n}</span></button>`;
-  $('#filters').innerHTML =
-    chip('__all', '전체', state.items.length) +
-    chip('__food', '유통기한 있는 것', state.items.filter(isFoodish).length) +
-    rs.map(([r, n]) => chip(r, r, n)).join('') +
-    `<span class="spacer"></span>
-     <label class="note sortlabel" for="sort">정렬
-       <select id="sort">
-         <option value="recent">최근 수정순</option>
-         <option value="expiry">유통기한 빠른순</option>
-         <option value="name">이름순</option>
-         <option value="room">공간별</option>
-       </select></label>`;
-  $('#sort').value = state.sort;
-  $('#roomList').innerHTML = rs.filter(([r]) => r !== '위치 미정').map(([r]) => `<option value="${esc(r)}">`).join('');
-}
-
-function renderList() {
-  const ul = $('#items');
-  const terms = state.q.toLowerCase().split(/\s+/).filter(Boolean);
-  if (!state.loaded) { ul.innerHTML = ''; $('#listCount').textContent = ''; return; }
-  if (!state.items.length) {
-    ul.innerHTML = `<li class="empty">
-      <strong>아직 등록된 물건이 없어요</strong>
-      <span>‘물건 추가’를 눌러 첫 물건과 그 자리를 적어 두세요.<br>공간(주방·안방)과 세부 위치(냉장고 2번째 칸)를 나눠 적으면 찾기 쉬워요.</span>
-      <button type="button" class="btn primary" data-action="add">물건 추가</button>
-    </li>`;
-    $('#listCount').textContent = '';
-    return;
-  }
-  const rows = state.items.filter((it) => {
-    if (state.room === '__food') { if (!isFoodish(it)) return false; }
-    else if (state.room !== '__all' && roomOf(it) !== state.room) return false;
-    const hay = [it.name, it.room, it.spot, it.memo, it.category].join(' ').toLowerCase();
-    return terms.every((t) => hay.includes(t));
-  });
-  const byName = (a, b) => (a.name || '').localeCompare(b.name || '', 'ko');
-  const sorters = {
-    recent: (a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')),
-    name: byName,
-    room: (a, b) => roomOf(a).localeCompare(roomOf(b), 'ko') || (a.spot || '').localeCompare(b.spot || '', 'ko') || byName(a, b),
-    expiry: (a, b) => (daysLeft(a.expiry) ?? 1e9) - (daysLeft(b.expiry) ?? 1e9) || byName(a, b),
-  };
-  rows.sort(sorters[state.sort] || sorters.recent);
-  $('#listCount').textContent = terms.length || state.room !== '__all' ? `${rows.length}개 찾음 / 전체 ${state.items.length}개` : `${state.items.length}개`;
-  if (!rows.length) {
-    ul.innerHTML = `<li class="empty"><strong>${state.q ? `‘${esc(state.q)}’에 맞는 물건이 없어요` : '이 조건에 맞는 물건이 없어요'}</strong><span>다른 이름이나 공간 이름으로 찾아보세요.</span></li>`;
-    return;
-  }
-  ul.innerHTML = rows.map((it) => {
-    const n = daysLeft(it.expiry), s = statusOf(it);
-    const qty = it.qty != null && Number(it.qty) !== 1 ? `<span class="qty">×${esc(it.qty)}</span>` : '';
-    return `<li><button type="button" class="item" data-id="${esc(it.id)}" aria-label="${esc(it.name)} 편집">
-      <span class="tag">${hl(it.room || '위치 미정', terms)}</span>
-      <span class="body">
-        <div class="name">${hl(it.name, terms)}${qty}</div>
-        ${it.spot ? `<div class="spot">${hl(it.spot, terms)}</div>` : ''}
-        ${it.memo ? `<div class="memo">${hl(it.memo, terms)}</div>` : ''}
-        ${it.category ? `<div class="cat">${hl(it.category, terms)}</div>` : ''}
-      </span>
-      <span class="dd">${n === null ? '' : `<span class="pill ${s}">${dLabel(n)}</span><span class="date">${esc(it.expiry)}</span>`}</span>
-    </button></li>`;
-  }).join('');
-}
 
 /* ---------- edit sheet ---------- */
 $('#f-cat').innerHTML = CATS.map((c) => `<option>${c}</option>`).join('');
+
+function fillZoneSelect(current) {
+  const opts = ['<option value="">구역 선택 안 함</option>'];
+  if (current && !ZONE.has(current)) opts.push(`<option value="${esc(current)}">${esc(current)} (예전 위치)</option>`);
+  for (const r of ROOMS) {
+    const kids = childrenOf(r.id);
+    opts.push(`<optgroup label="${esc(r.id)}"><option value="${esc(r.id)}">${esc(r.id)}${kids.length ? ' (바닥·기타)' : ''}</option>${kids.map((k) => `<option value="${esc(k.id)}">${esc(k.id)}</option>`).join('')}</optgroup>`);
+  }
+  $('#f-room').innerHTML = opts.join('');
+  $('#f-room').value = current || '';
+}
 
 function openSheet(item) {
   state.editing = item ? item.id : null;
   $('#formTitle').textContent = item ? '물건 편집' : '물건 추가';
   $('#f-name').value = item?.name || '';
-  $('#f-cat').value = item?.category || (state.room === '__food' ? '식료품' : '생활용품');
+  $('#f-cat').value = item?.category || (state.foodOnly ? '식료품' : '생활용품');
   $('#f-qty').value = item?.qty ?? 1;
-  $('#f-room').value = item?.room || (state.room.startsWith('__') || state.room === '위치 미정' ? '' : state.room);
+  const sel = state.selected && state.selected !== UNPLACED ? state.selected : '';
+  fillZoneSelect(item ? (item.room || '').trim() : sel);
   $('#f-spot').value = item?.spot || '';
   $('#f-expiry').value = item?.expiry || '';
   $('#f-memo').value = item?.memo || '';
@@ -209,12 +328,12 @@ function openSheet(item) {
 }
 function closeSheet() { $('#scrim').hidden = true; state.editing = null; }
 function syncSpots() {
-  const room = $('#f-room').value.trim();
-  const spots = [...new Set(state.items.filter((it) => !room || it.room === room).map((it) => it.spot).filter(Boolean))];
+  const room = $('#f-room').value;
+  const spots = [...new Set(state.items.filter((it) => !room || (it.room || '').trim() === room).map((it) => it.spot).filter(Boolean))];
   $('#spotList').innerHTML = spots.map((s) => `<option value="${esc(s)}">`).join('');
 }
 
-$('#f-room').addEventListener('input', syncSpots);
+$('#f-room').addEventListener('change', syncSpots);
 $('#qtyMinus').addEventListener('click', () => { $('#f-qty').value = Math.max(0, (Number($('#f-qty').value) || 0) - 1); });
 $('#qtyPlus').addEventListener('click', () => { $('#f-qty').value = (Number($('#f-qty').value) || 0) + 1; });
 document.querySelectorAll('.quick button').forEach((b) => b.addEventListener('click', () => {
@@ -223,7 +342,6 @@ document.querySelectorAll('.quick button').forEach((b) => b.addEventListener('cl
 }));
 $('#cancelBtn').addEventListener('click', closeSheet);
 $('#scrim').addEventListener('click', (e) => { if (e.target === $('#scrim')) closeSheet(); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#scrim').hidden) closeSheet(); });
 
 function dbErrorText(error) {
   if (!error) return '';
@@ -240,7 +358,7 @@ $('#form').addEventListener('submit', async (e) => {
     name,
     category: $('#f-cat').value,
     qty: $('#f-qty').value === '' ? 1 : Number($('#f-qty').value),
-    room: $('#f-room').value.trim(),
+    room: $('#f-room').value,
     spot: $('#f-spot').value.trim(),
     expiry: $('#f-expiry').value || null,
     memo: $('#f-memo').value.trim(),
@@ -253,7 +371,7 @@ $('#form').addEventListener('submit', async (e) => {
   btn.disabled = false;
   if (error) { err.textContent = dbErrorText(error); err.hidden = false; return; }
   closeSheet();
-  toast(editing ? '수정했어요' : `‘${name}’ 저장했어요`);
+  toast(editing ? '수정했어요' : `‘${name}’${data.room ? `을(를) ${data.room}에` : ''} 저장했어요`);
   loadItems();
 });
 
@@ -269,24 +387,37 @@ $('#delBtn').addEventListener('click', async () => {
 
 /* ---------- interactions ---------- */
 $('#addBtn').addEventListener('click', () => openSheet(null));
+$('#panelAdd').addEventListener('click', () => openSheet(null));
+$('#allBtn').addEventListener('click', () => { state.selected = null; renderMap(); renderPanel(); });
+$('#unplacedBtn').addEventListener('click', () => selectZone(UNPLACED));
+$('#foodToggle').addEventListener('click', () => { state.foodOnly = !state.foodOnly; renderMap(); renderPanel(); });
 let qTimer;
-$('#q').addEventListener('input', (e) => { clearTimeout(qTimer); qTimer = setTimeout(() => { state.q = e.target.value.trim(); renderList(); }, 80); });
+$('#q').addEventListener('input', (e) => { clearTimeout(qTimer); qTimer = setTimeout(() => { state.q = e.target.value.trim(); renderMap(); renderPanel(); }, 80); });
+$('#plan').addEventListener('click', (e) => { const g = e.target.closest('[data-zone]'); if (g) selectZone(g.dataset.zone); });
+$('#plan').addEventListener('keydown', (e) => {
+  const g = e.target.closest('[data-zone]');
+  if (g && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); selectZone(g.dataset.zone); }
+});
 document.addEventListener('click', (e) => {
-  const chip = e.target.closest('.chip');
-  if (chip) { state.room = chip.dataset.room; renderFilters(); renderList(); return; }
+  const pick = e.target.closest('[data-zone-pick]');
+  if (pick) { selectZone(pick.dataset.zonePick); return; }
   const row = e.target.closest('[data-id]');
   if (row && !row.closest('.scrim')) { const it = state.items.find((x) => x.id === row.dataset.id); if (it) openSheet(it); return; }
   if (e.target.closest('[data-action="add"]')) openSheet(null);
 });
-document.addEventListener('change', (e) => {
-  if (e.target.id === 'sort') { state.sort = e.target.value; try { localStorage.setItem('sort', state.sort); } catch {} renderList(); }
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (!$('#scrim').hidden) closeSheet();
+  else if (!$('#pwScrim').hidden) closePw();
+  else if (!$('#expScrim').hidden) closeExp();
 });
+$('#sort').addEventListener('change', (e) => { state.sort = e.target.value; try { localStorage.setItem('sort', state.sort); } catch {} renderPanel(); });
 $('#alertDays').addEventListener('change', async (e) => {
   state.alertDays = Number(e.target.value); render();
   const { error } = await sb.from('settings').update({ alert_days: state.alertDays }).eq('id', 1);
-  if (error) toast('알림 기준을 저장하지 못했어요');
+  toast(error ? '알림 기준을 저장하지 못했어요' : `남은 기간 ${state.alertDays}일 이하면 알려드릴게요`);
 });
-try { const s = localStorage.getItem('sort'); if (s) state.sort = s; } catch {}
+try { const s = localStorage.getItem('sort'); if (s && ['recent', 'expiry', 'name'].includes(s)) state.sort = s; } catch {}
 
 /* ---------- auth ---------- */
 function loginMsg(text) { const m = $('#loginMsg'); m.textContent = text; m.hidden = !text; }
@@ -327,7 +458,7 @@ $('#linkBtn').addEventListener('click', async () => {
   if (error) {
     const wait = Number((error.message || '').match(/(\d+)\s*seconds?/)?.[1]) || 60;
     loginMsg(error.status === 429
-      ? `메일은 잠시 뒤에 다시 보낼 수 있어요. 받은 메일이 있다면 그 링크를 눌러 주세요.`
+      ? '메일은 잠시 뒤에 다시 보낼 수 있어요. 받은 메일이 있다면 그 링크를 눌러 주세요.'
       : '로그인 메일을 보내지 못했어요: ' + error.message);
     linkCooldown = error.status === 429 ? wait : 0;
   } else {
@@ -336,20 +467,20 @@ $('#linkBtn').addEventListener('click', async () => {
   }
   clearTimeout(linkTimer); tickLink();
 });
-$('#signOutBtn').addEventListener('click', async () => { await sb.auth.signOut(); });
+$('#signOutBtn').addEventListener('click', async () => { $('#pwScrim').hidden = true; await sb.auth.signOut(); });
 
-/* 비밀번호 설정 */
+/* 설정 (알림 기준 + 비밀번호) */
 function closePw() { $('#pwScrim').hidden = true; }
 $('#pwBtn').addEventListener('click', () => {
   const email = state.session?.user?.email || '';
   $('#pwEmail').textContent = email; $('#pwUser').value = email;
   $('#pwNew').value = ''; $('#pwNew2').value = ''; $('#pwErr').hidden = true;
+  $('#alertDays').value = String(state.alertDays);
   $('#pwScrim').hidden = false;
-  setTimeout(() => $('#pwNew').focus(), 30);
+  setTimeout(() => $('#alertDays').focus(), 30);
 });
 $('#pwCancel').addEventListener('click', closePw);
 $('#pwScrim').addEventListener('click', (e) => { if (e.target === $('#pwScrim')) closePw(); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#pwScrim').hidden) closePw(); });
 $('#pwForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const a = $('#pwNew').value, b = $('#pwNew2').value, err = $('#pwErr');
@@ -360,13 +491,13 @@ $('#pwForm').addEventListener('submit', async (e) => {
   const { error } = await sb.auth.updateUser({ password: a });
   $('#pwSave').disabled = false;
   if (error) {
-    return fail(/reauth|recent/i.test(error.message) ? '보안을 위해 로그아웃 후 메일 링크로 다시 들어와서 설정해 주세요.'
+    return fail(/reauth|recent/i.test(error.message) ? '보안을 위해 로그아웃 후 다시 로그인해서 설정해 주세요.'
       : /weak|short|characters/i.test(error.message) ? '더 길거나 복잡한 비밀번호로 정해 주세요.'
       : /same|different/i.test(error.message) ? '지금 쓰는 비밀번호와 같아요.'
       : '비밀번호를 저장하지 못했어요: ' + error.message);
   }
   closePw();
-  toast('비밀번호를 정했어요. 다음부터 메일 없이 로그인할 수 있어요');
+  toast('비밀번호를 바꿨어요');
 });
 
 /* ---------- data ---------- */
@@ -405,7 +536,7 @@ async function enterApp(session) {
 }
 function leaveApp() {
   if (state.channel) { sb.removeChannel(state.channel); state.channel = null; }
-  state.items = []; state.loaded = false;
+  state.items = []; state.loaded = false; state.selected = null;
   show('loginView');
 }
 
@@ -425,6 +556,6 @@ if (!window.supabase || !cfg.SUPABASE_URL || cfg.SUPABASE_URL.includes('YOUR-PRO
       if (prev !== session.user.id || $('#appView').hidden) enterApp(session);
     }, 0);
   });
-  // 다른 탭에서 돌아왔을 때 날짜(D-day)가 바뀌었을 수 있으니 다시 그립니다.
+  // 다른 탭에서 돌아왔을 때 날짜(D-day)가 바뀌었을 수 있으니 다시 불러옵니다.
   document.addEventListener('visibilitychange', () => { if (!document.hidden && state.loaded) scheduleReload(); });
 }
