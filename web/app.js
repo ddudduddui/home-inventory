@@ -150,7 +150,7 @@ function renderMap() {
   const zoneG = (z) => {
     const list = totalOf(z);
     const n = list.length;
-    const cls = ['zone', z.kind, z.balcony ? 'balcony' : '', z.tile ? 'tile' : '',
+    const cls = ['zone', z.kind, z.balcony ? 'balcony' : '', z.tile ? 'tile' : '', z.fridge ? 'fridge' : '',
       sel === z.id ? 'selected' : '', selRoom === z.id && sel !== z.id ? 'parent' : '',
       searching ? (n ? 'hit' : 'dim') : ''].filter(Boolean).join(' ');
     const label = `${z.id}, 물건 ${n}개${worstTone(list) === 'expired' ? ', 기한 지난 물건 있음' : worstTone(list) === 'soon' ? ', 기한 임박 물건 있음' : ''}`;

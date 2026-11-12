@@ -23,6 +23,10 @@ window.HOME_PLAN = {
     { id: '주방 창문 서랍장', short: '창문 서랍장', kind: 'storage', room: '뒷발코니', rect: [340, 38, 220, 42] },
     { id: '주방 상부장',      short: '상부장',      kind: 'storage', room: '주방',     rect: [350, 170, 42, 255] },
     { id: '주방 하부장',      short: '하부장',      kind: 'storage', room: '주방',     rect: [394, 170, 42, 255], badge: 'bottom' },
+    // 냉장고: 정면에서 본 모양 (위 = 냉장실, 아래 1층 = 냉동고 왼쪽·오른쪽)
+    { id: '냉장고',        short: '냉장고',      fridge: true,              kind: 'storage', room: '주방', rect: [445, 333, 118, 48] },
+    { id: '냉동고 왼쪽',   short: '냉동\n왼쪽',   fridge: true, small: true, kind: 'storage', room: '주방', rect: [445, 382, 58, 50] },
+    { id: '냉동고 오른쪽', short: '냉동\n오른쪽', fridge: true, small: true, kind: 'storage', room: '주방', rect: [504, 382, 59, 50] },
     { id: '컴퓨터방 서랍장',  short: '서랍장',      kind: 'storage', room: '컴퓨터방', rect: [140, 175, 34, 245] },
     { id: '컴퓨터 책상 서랍', short: '책상 서랍',   kind: 'storage', room: '컴퓨터방', rect: [188, 384, 116, 36] },
     { id: '화장실 상부장',    short: '상부장',      kind: 'storage', room: '화장실',   rect: [700, 406, 34, 128] },

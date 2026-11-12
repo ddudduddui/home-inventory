@@ -24,6 +24,8 @@
   --tile: #e2e7e6;
   --balcony: #dde2e1;
   --wall: #26302d;
+  --fridge: #dcebf3;
+  --fridge-ink: #1f4a5e;
   --font-display: "IBM Plex Sans KR", "Noto Sans KR", system-ui, sans-serif;
   --font-body: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
@@ -37,7 +39,7 @@
     --label: #4a4122; --label-ink: #f4e6b0;
     --danger: #ff8a7f; --danger-soft: #3d1f1c; --warn: #f2b85a; --warn-soft: #3a2c14;
     --ok: #82cf96; --ok-soft: #1d3324; --shadow: 0 1px 2px rgba(0,0,0,.3);
-    --floor: #2f2a22; --floor-hover: #3b342a; --tile: #232b29; --balcony: #1f2725; --wall: #a9b8b3;
+    --floor: #2f2a22; --floor-hover: #3b342a; --tile: #232b29; --balcony: #1f2725; --wall: #a9b8b3; --fridge: #1d3440; --fridge-ink: #b9dcec;
     color-scheme: dark;
   }
 }
@@ -153,6 +155,10 @@ main { display: grid; gap: 14px; padding-block: 14px calc(100px + env(safe-area-
 .plan .room-count.expired { fill: var(--danger); font-weight: 700; }
 .plan .store-name { font-family: var(--font-display); font-weight: 700; font-size: 23px; fill: var(--label-ink); }
 .plan .store-name.small { font-size: 19px; }
+.plan .zone.storage.fridge .shape { fill: var(--fridge); stroke: var(--fridge-ink); }
+.plan .zone.storage.fridge .store-name { fill: var(--fridge-ink); }
+.plan .zone.storage.fridge.selected .shape { fill: var(--accent); stroke: var(--accent); }
+.plan .zone.storage.fridge.selected .store-name { fill: var(--accent-ink); }
 .plan .badge circle { fill: var(--ink); stroke: var(--surface); stroke-width: 3; }
 .plan .badge text { fill: var(--surface); font-family: var(--font-mono); font-size: 18px; font-weight: 600; }
 .plan .badge.soon circle { fill: var(--warn); }
